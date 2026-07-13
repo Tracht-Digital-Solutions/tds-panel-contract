@@ -62,12 +62,17 @@ jobs:
         uses: actions/setup-node@v5
         with:
           node-version: '22'
-          cache: 'npm'
           registry-url: 'https://npm.pkg.github.com'
           scope: '@tracht-digital-solutions'
 
       - name: Install
-        run: npm ci
+        # NOT `npm ci` + a committed lockfile: a Windows-generated package-lock
+        # pins only the win32 rollup/esbuild optional binaries, so `npm ci` on
+        # the Linux runner dies with "Cannot find module @rollup/rollup-linux-
+        # x64-gnu" (npm optional-deps bug #4828). The project convention is
+        # `npm install --no-package-lock` — resolves fresh per-platform. (No
+        # `cache: npm` above for the same reason: it needs a lockfile.)
+        run: npm install --no-package-lock
 
       - name: Type check
         run: npm run type-check
