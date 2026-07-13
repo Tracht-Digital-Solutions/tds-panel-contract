@@ -1,31 +1,43 @@
 /**
  * Astro-side glue for the panel extension contract.
  *
- * The host product (`core-panel-frontend` built as the admin OR customer
+ * The host product (`core-panel-frontend`, built as the admin OR customer
  * target) spreads `panelHost({ extensions: [...] })` into its Astro `integrations`.
  * At build time it:
  *   1. composes the manifests ({@link composeExtensions}) — failing the build
- *      loudly on a conflict/missing-dep,
+ *      loudly on a conflict / missing-dep,
  *   2. `injectRoute()`s every contributed route, and
- *   3. exposes the flattened {@link ComposedRegistry} as a virtual module
- *      (`virtual:panel-registry`) the shell imports for nav / widgets / settings.
+ *   3. exposes three virtual modules the shell imports:
+ *        - `virtual:panel-registry`  — the flattened {@link ComposedRegistry}
+ *          as data (nav, permissions, i18n, routes + widget/settings metadata).
+ *        - `virtual:panel-widgets`   — the widgets with a real, statically
+ *          imported `Component`, so the Dashboard host can render them in a loop.
+ *        - `virtual:panel-settings`  — ditto for the settings sections.
  *
- * This keeps composition at build time — no runtime plugin loading, no
- * `output: "server"`, one static `dist/` per product. See tds-shared's
- * `./astro` export for the precedent of shipping build config from a package.
+ * Why two shapes: Astro can't hydrate a component named only by a runtime
+ * string. So for the slots that render components (widgets, settings) we
+ * *generate* module code containing real `import` statements Vite resolves; the
+ * `island` specifier in a manifest points to that component's entrypoint (an
+ * `.astro` component, which may itself embed a hydrated React island). Nav
+ * entries are plain links, so they stay data-only.
  *
- * NB: we deliberately model Astro's integration shape structurally
- * ({@link AstroIntegrationLike}) instead of importing `astro`, so
- * `panel-contract` stays dependency-free and builds in isolation. The host
- * passes the real integration object straight to Astro; the structural type is
- * assignment-compatible.
+ * Composition happens at build time — no runtime plugin loading, no
+ * `output: "server"`, one static `dist/` per product.
+ *
+ * NB: we model Astro's integration shape structurally ({@link
+ * AstroIntegrationLike}) instead of importing `astro`, so `panel-contract` stays
+ * dependency-free and builds in isolation; the object is assignment-compatible
+ * with the real `AstroIntegration`.
  */
 
 import { composeExtensions } from "./registry.js";
-import type { ComposedRegistry, ExtensionManifest } from "./types.js";
+import type { ComposedRegistry, ExtensionManifest, SettingsPanel, WidgetManifest } from "./types.js";
 
-const VIRTUAL_ID = "virtual:panel-registry";
-const RESOLVED_VIRTUAL_ID = "\0" + VIRTUAL_ID;
+const MODULES = {
+  registry: "virtual:panel-registry",
+  widgets: "virtual:panel-widgets",
+  settings: "virtual:panel-settings",
+} as const;
 
 /** Minimal structural mirror of `astro`'s `AstroIntegration` (build hooks we use). */
 export interface AstroIntegrationLike {
@@ -59,12 +71,11 @@ export function panelHost(options: PanelHostOptions): AstroIntegrationLike {
         for (const route of registry.routes) {
           injectRoute({ pattern: route.pattern, entrypoint: route.entrypoint });
         }
-        updateConfig({
-          vite: { plugins: [panelRegistryVitePlugin(registry)] },
-        });
+        updateConfig({ vite: { plugins: [panelRegistryVitePlugin(registry)] } });
         logger.info(
           `panel-host: ${registry.order.length} extension(s) [${registry.order.join(", ")}], ` +
-            `${registry.routes.length} route(s), ${registry.widgets.length} widget(s)`,
+            `${registry.routes.length} route(s), ${registry.widgets.length} widget(s), ` +
+            `${registry.settings.length} settings panel(s)`,
         );
       },
     },
@@ -78,20 +89,51 @@ interface VitePluginLike {
   load(id: string): string | undefined;
 }
 
-/**
- * Serves the composed registry as `virtual:panel-registry`, so the shell can
- * `import { registry } from "virtual:panel-registry"`. Island/entrypoint fields
- * stay strings the host resolves — the registry itself carries no live imports.
- */
+/** Serves the three virtual modules the host imports. */
 function panelRegistryVitePlugin(registry: ComposedRegistry): VitePluginLike {
+  const resolved = new Map<string, string>(
+    Object.values(MODULES).map((id) => [id, "\0" + id]),
+  );
+
   return {
     name: "panel-registry",
     resolveId(id) {
-      return id === VIRTUAL_ID ? RESOLVED_VIRTUAL_ID : undefined;
+      return resolved.get(id);
     },
     load(id) {
-      if (id !== RESOLVED_VIRTUAL_ID) return undefined;
-      return `export const registry = ${JSON.stringify(registry)};\n`;
+      if (id === resolved.get(MODULES.registry)) {
+        return `export const registry = ${JSON.stringify(registry)};\n`;
+      }
+      if (id === resolved.get(MODULES.widgets)) {
+        return generateComponentModule("widgets", registry.widgets);
+      }
+      if (id === resolved.get(MODULES.settings)) {
+        return generateComponentModule("settings", registry.settings);
+      }
+      return undefined;
     },
   };
+}
+
+/**
+ * Generate a module that statically imports each slot item's `island`
+ * component and exports the metadata + the resolved `Component`. Real `import`
+ * statements are what let Astro render + hydrate the components in a loop.
+ */
+function generateComponentModule(
+  exportName: "widgets" | "settings",
+  items: readonly (WidgetManifest | SettingsPanel)[],
+): string {
+  const imports: string[] = [];
+  const entries: string[] = [];
+  items.forEach((item, index) => {
+    const local = `__C${index}`;
+    imports.push(`import ${local} from ${JSON.stringify(item.island)};`);
+    // Spread the metadata (JSON-safe), then attach the imported component.
+    entries.push(`  { ...${JSON.stringify(item)}, Component: ${local} }`);
+  });
+  return (
+    imports.join("\n") +
+    `\nexport const ${exportName} = [\n${entries.join(",\n")}\n];\n`
+  );
 }
