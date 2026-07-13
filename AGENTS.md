@@ -9,9 +9,9 @@ admin platform. It defines *how* a base panel composes extensions — nothing mo
 It contains **no features**: no routes, no UI, no DB. Two halves, one repo:
 
 - **TypeScript** (`src/`, published to GitHub Packages as
-  `@tracht-digital-solutions/panel-contract`) — the frontend `ExtensionManifest`
+  `@tracht-digital-solutions/tds-panel-contract`) — the frontend `ExtensionManifest`
   + `composeExtensions` + the `panelHost` Astro integration (`./astro` export).
-- **PHP** (`php/src/`, Composer `tracht-digital-solutions/panel-contract`) — the
+- **PHP** (`php/src/`, Composer `tracht-digital-solutions/tds-panel-contract`) — the
   backend `Module` interface + `ModuleRegistry`.
 
 The two halves are **mirror images on purpose** (like the existing Zod ↔ PHP

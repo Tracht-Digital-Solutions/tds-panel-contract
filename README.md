@@ -10,8 +10,8 @@ Two halves ship from this one repo:
 
 | Half | Package | Consumed by |
 |---|---|---|
-| **Frontend** (TypeScript) | `@tracht-digital-solutions/panel-contract` (GitHub Packages) | `core-panel-frontend` + every extension's frontend package |
-| **Backend** (PHP) | `tracht-digital-solutions/panel-contract` (Composer) | `core-panel-api` + every extension's backend package |
+| **Frontend** (TypeScript) | `@tracht-digital-solutions/tds-panel-contract` (GitHub Packages) | `core-panel-frontend` + every extension's frontend package |
+| **Backend** (PHP) | `tracht-digital-solutions/tds-panel-contract` (Composer) | `core-panel-api` + every extension's backend package |
 
 ## Why build-time composition
 
@@ -28,7 +28,7 @@ from "shared design" to "mountable features".
 An extension exports an `ExtensionManifest` describing what it contributes:
 
 ```ts
-import { defineExtension } from "@tracht-digital-solutions/panel-contract";
+import { defineExtension } from "@tracht-digital-solutions/tds-panel-contract";
 
 export default defineExtension({
   id: "time-tracker",
@@ -50,8 +50,8 @@ persists per-user layout), `routes`, `settings`, `i18n`.
 The product host composes them in its `astro.config.mjs`:
 
 ```ts
-import { panelHost } from "@tracht-digital-solutions/panel-contract/astro";
-import timeTracker from "@tracht-digital-solutions/ext-time-tracker";
+import { panelHost } from "@tracht-digital-solutions/tds-panel-contract/astro";
+import timeTracker from "@tracht-digital-solutions/tds-ext-time-tracker";
 // ...
 export default defineConfig({
   integrations: [panelHost({ extensions: [timeTracker /*, ...*/] })],

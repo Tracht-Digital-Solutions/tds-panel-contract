@@ -126,7 +126,7 @@ jobs:
         if: ${{ inputs.publish_tag != 'none' }}
         uses: actions/delete-package-versions@v5
         with:
-          package-name: panel-contract
+          package-name: tds-panel-contract
           package-type: npm
           min-versions-to-keep: 5
           delete-only-pre-release-versions: 'true'
@@ -136,7 +136,7 @@ jobs:
         if: ${{ inputs.publish_tag == 'latest' }}
         uses: actions/delete-package-versions@v5
         with:
-          package-name: panel-contract
+          package-name: tds-panel-contract
           package-type: npm
           min-versions-to-keep: 10
           ignore-versions: '^.*-.*$'
